@@ -33,11 +33,12 @@ def solve_captcha(captcha_image_url):
         print("Failed to solve CAPTCHA.")
         sys.exit(e)
     else:
-        sys.exit('solved: ' + str(result))
+        print(result['code'])
+        return result['code']
 
 def scrape_application_data(app_number):
     options = Options()
-    options.add_argument('--headless')
+    options.add_argument('--headless') # uncomment to view the GUI
     options.add_argument('--disable-gpu')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
@@ -49,14 +50,14 @@ def scrape_application_data(app_number):
         select_national_appNum = driver.find_element(By.ID, "rdb_0")
         select_national_appNum.click()
 
+        # getting a race condition here - captcha.ashx is getting dynamically updated while being fetched
+        # CaptchaURL : https://tmrsearch.ipindia.gov.in/eregister/captcha.ashx
         captcha_image_element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.ID, "ImageCaptcha"))
         )
 
         captcha_image_url = captcha_image_element.get_attribute('src')
         captcha_solution = solve_captcha(captcha_image_url)
-        
-        print("CAPTCHA::::", captcha_solution)
 
         if not captcha_solution:
             return None
