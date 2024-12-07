@@ -14,18 +14,12 @@ from io import BytesIO
 from dotenv import load_dotenv
 
 load_dotenv()
-GECKO_DRIVER_PATH = 'driver/geckodriver'
+GECKO_DRIVER_PATH = os.getenv('GECKO_DRIVER_PATH')
+API_KEY_2CAPTCHA = os.getenv('API_KEY_2CAPTCHA')
+BASE_URL_IPINDIA = os.getenv('BASE_URL_IPINDIA')
 
-BASE_URL = 'https://tmrsearch.ipindia.gov.in/eregister/Application_View.aspx'
-
-def solve_captcha(captcha_image_url):
-    response = requests.get(captcha_image_url)
-    image = Image.open(BytesIO(response.content))
-    image_path = 'captcha_image.png'
-    image.save(image_path)
-
-    API_KEY = os.getenv('API_KEY_2CAPTCHA')
-    solver = TwoCaptcha(API_KEY)
+def solve_captcha():
+    solver = TwoCaptcha(API_KEY_2CAPTCHA)
 
     try:
         result = solver.normal('captcha_image.png')
@@ -38,13 +32,13 @@ def solve_captcha(captcha_image_url):
 
 def scrape_application_data(app_number):
     options = Options()
-    options.add_argument('--headless') # uncomment to view the GUI
+    options.add_argument('--headless') # comment out to view the GUI
     options.add_argument('--disable-gpu')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
 
     driver = webdriver.Firefox(service=Service(GECKO_DRIVER_PATH), options=options)
-    driver.get(BASE_URL)
+    driver.get(BASE_URL_IPINDIA)
 
     try:
         select_national_appNum = driver.find_element(By.ID, "rdb_0")
@@ -55,9 +49,33 @@ def scrape_application_data(app_number):
         captcha_image_element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.ID, "ImageCaptcha"))
         )
+        driver.execute_script("arguments[0].scrollIntoView(true);", captcha_image_element)
+        location = captcha_image_element.location
+        size = captcha_image_element.size
+        driver.save_screenshot("screenshot.png")
 
-        captcha_image_url = captcha_image_element.get_attribute('src')
-        captcha_solution = solve_captcha(captcha_image_url)
+        x = location['x']
+        y = location['y']
+        w = size['width']
+        h = size['height']
+
+        # style="width:170px;border-width:0px;"
+
+        width = x + w
+        height = y + h
+
+        print(x, y, w, h, width, height)
+
+        image_path = 'captcha_image.png'
+
+        image = Image.open('screenshot.png')
+
+        # dynamic shifting added - as image wasn't being cropped correctly - TODO: Check if this can be dynamically fixed, works for now
+        image = image.crop((int(x) + 650, int(y) + 100, int(width)+800, int(height) + 130))
+        image.save(image_path)
+
+        # captcha_image_url = captcha_image_element.get_attribute('src')
+        captcha_solution = solve_captcha()
 
         if not captcha_solution:
             return None

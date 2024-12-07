@@ -12,6 +12,8 @@ vim .env
 In `.env`, enter your API key from 2Captcha:
 ```
 API_KEY_2CAPTCHA='your_API_KEY' 
+GECKO_DRIVER_PATH='firefox_browser_driver_path'
+BASE_URL_IPINDIA='base_URL'
 ```
 
 In `driver` folder - place your geckodriver executable file
