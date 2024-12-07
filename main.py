@@ -20,14 +20,13 @@ BASE_URL_IPINDIA = os.getenv('BASE_URL_IPINDIA')
 
 def solve_captcha():
     solver = TwoCaptcha(API_KEY_2CAPTCHA)
-
     try:
         result = solver.normal('captcha_image.png')
     except Exception as e:
         print("Failed to solve CAPTCHA.")
         sys.exit(e)
     else:
-        print(result['code'])
+        print("CAPTCHA Solved: ", result['code'])
         return result['code']
 
 def scrape_application_data(app_number):
@@ -59,19 +58,14 @@ def scrape_application_data(app_number):
         w = size['width']
         h = size['height']
 
-        # style="width:170px;border-width:0px;"
-
         width = x + w
         height = y + h
-
-        print(x, y, w, h, width, height)
-
         image_path = 'captcha_image.png'
-
         image = Image.open('screenshot.png')
 
-        # dynamic shifting added - as image wasn't being cropped correctly - TODO: Check if this can be dynamically fixed, works for now
-        image = image.crop((int(x) + 650, int(y) + 100, int(width)+800, int(height) + 130))
+        # uncomment next line & comment next-2-next line if you want to run GUI !!!
+        # image = image.crop((int(x) + 650, int(y) + 100, int(width)+800, int(height) + 130))
+        image = image.crop((int(x), int(y), int(width), int(height)))
         image.save(image_path)
 
         # captcha_image_url = captcha_image_element.get_attribute('src')
@@ -90,11 +84,20 @@ def scrape_application_data(app_number):
         submit_button.click()
 
         WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.ID, "panelgetdetail"))
+            EC.presence_of_element_located((By.ID, "SearchWMDatagrid_ctl03_lnkbtnappNumber1"))
         )
 
-        result_data = driver.find_element(By.ID, "panelgetdetail").text
-        return result_data
+        found_application = driver.find_element(By.ID, "SearchWMDatagrid_ctl03_lnkbtnappNumber1")
+        found_application.click()
+
+        raw_application_data = driver.find_element(By.XPATH, "/html/body").text
+        print(raw_application_data)
+        # Next Steps:
+            # 1. Structure this data into tabular / JSON format
+            # 2. feed into DB
+
+        driver.close()
+        return
 
     except Exception as e:
         print(f"Error: {e}")
@@ -105,12 +108,14 @@ def scrape_application_data(app_number):
 
 #### Future Plan
     # 1. make the ranges dynamic 
-    # 2. to be fetched as per last run from DB
+    # 2. Add error Handling & re-try mechanism / keep log
+    # 3. to be fetched as per last run from DB
 
-for app_number in range(1111000, 1111001): # running only one application number now
-    print(f"Scraping application number: {app_number}")
-    data = scrape_application_data(app_number)
-    if data:
-        print(f"Data for application number {app_number}: {data}")
-    
-    time.sleep(1)
+if __name__ == "__main__":
+    for app_number in range(1111000, 1111003): # running only one application number now
+        print(f"Scraping application number: {app_number}")
+        data = scrape_application_data(app_number)
+        if data:
+            print(f"Data for application number {app_number}: {data}")
+        
+        time.sleep(1)
