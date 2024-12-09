@@ -4,6 +4,7 @@ Pre-requisite: Firefox Browser installed
 
 ```
 python / python3 -m venv venv
+source venv/bin/activate
 pip / pip3 install -r requirements.txt
 mkdir driver
 vim .env
