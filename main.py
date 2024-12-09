@@ -5,23 +5,20 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from twocaptcha import TwoCaptcha
-import sys
-import os
-import time
-import requests
+import sys, os, time, uuid, glob, re
 from PIL import Image
-from io import BytesIO
 from dotenv import load_dotenv
+from concurrent.futures import ThreadPoolExecutor
 
 load_dotenv()
 GECKO_DRIVER_PATH = os.getenv('GECKO_DRIVER_PATH')
 API_KEY_2CAPTCHA = os.getenv('API_KEY_2CAPTCHA')
 BASE_URL_IPINDIA = os.getenv('BASE_URL_IPINDIA')
 
-def solve_captcha():
+def solve_captcha(image_path):
     solver = TwoCaptcha(API_KEY_2CAPTCHA)
     try:
-        result = solver.normal('captcha_image.png')
+        result = solver.normal(image_path)
     except Exception as e:
         print("Failed to solve CAPTCHA.")
         sys.exit(e)
@@ -29,7 +26,7 @@ def solve_captcha():
         print("CAPTCHA Solved: ", result['code'])
         return result['code']
 
-def scrape_application_data(app_number):
+def scrape_application_data(app_number, unique_image_uuid):
     options = Options()
     options.add_argument('--headless') # comment out to view the GUI
     options.add_argument('--disable-gpu')
@@ -51,7 +48,7 @@ def scrape_application_data(app_number):
         driver.execute_script("arguments[0].scrollIntoView(true);", captcha_image_element)
         location = captcha_image_element.location
         size = captcha_image_element.size
-        driver.save_screenshot("screenshot.png")
+        driver.save_screenshot(f"screenshot_{unique_image_uuid}.png")
 
         x = location['x']
         y = location['y']
@@ -60,16 +57,14 @@ def scrape_application_data(app_number):
 
         width = x + w
         height = y + h
-        image_path = 'captcha_image.png'
-        image = Image.open('screenshot.png')
+        image = Image.open(f"screenshot_{unique_image_uuid}.png")
 
         # uncomment next line & comment next-2-next line if you want to run GUI !!!
         # image = image.crop((int(x) + 650, int(y) + 100, int(width)+800, int(height) + 130))
         image = image.crop((int(x), int(y), int(width), int(height)))
-        image.save(image_path)
+        image.save(f"captcha_{unique_image_uuid}.png")
 
-        # captcha_image_url = captcha_image_element.get_attribute('src')
-        captcha_solution = solve_captcha()
+        captcha_solution = solve_captcha(f"captcha_{unique_image_uuid}.png")
 
         if not captcha_solution:
             return None
@@ -91,13 +86,14 @@ def scrape_application_data(app_number):
         found_application.click()
 
         raw_application_data = driver.find_element(By.XPATH, "/html/body").text
-        print(raw_application_data)
+        # print(type(raw_application_data), raw_application_data)
+
         # Next Steps:
             # 1. Structure this data into tabular / JSON format
             # 2. feed into DB
 
         driver.close()
-        return
+        return raw_application_data
 
     except Exception as e:
         print(f"Error: {e}")
@@ -111,11 +107,73 @@ def scrape_application_data(app_number):
     # 2. Add error Handling & re-try mechanism / keep log
     # 3. to be fetched as per last run from DB
 
-if __name__ == "__main__":
-    for app_number in range(1111000, 1111003): # running only one application number now
+def parse_raw_data(raw_data):
+    data = {}
+    data['as_on_date'] = re.search(r'As on Date\s*:\s*(.*)', raw_data).group(1).strip()
+    data['status'] = re.search(r'Status\s*:\s*(.*)', raw_data).group(1).strip()
+    data['tm_application_no'] = re.search(r'TM Application No\.\s*(\d+)', raw_data).group(1).strip()
+    data['class'] = re.search(r'Class\s*(\d+)', raw_data).group(1).strip()
+    data['date_of_application'] = re.search(r'Date of Application\s*(.*)', raw_data).group(1).strip()
+    data['appropriate_office'] = re.search(r'Appropriate Office\s*(.*)', raw_data).group(1).strip()
+    data['state'] = re.search(r'State\s*(.*)', raw_data).group(1).strip()
+    data['country'] = re.search(r'Country\s*(.*)', raw_data).group(1).strip()
+    data['filing_mode'] = re.search(r'Filing Mode\s*(.*)', raw_data).group(1).strip()
+    data['tm_applied_for'] = re.search(r'TM Applied For\s*(.*)', raw_data).group(1).strip()
+    data['tm_category'] = re.search(r'TM Category\s*(.*)', raw_data).group(1).strip()
+    data['trade_mark_type'] = re.search(r'Trade Mark Type\s*(.*)', raw_data).group(1).strip()
+    data['user_detail'] = re.search(r'User Detail\s*(.*)', raw_data).group(1).strip()
+    data['certificate_no'] = re.search(r'Certificate No\.\s*(\d+)', raw_data).group(1).strip()
+    data['certificate_date'] = re.search(r'Dated\s*:\s*(.*)', raw_data).group(1).strip()
+    data['valid_upto'] = re.search(r'Valid upto/ Renewed upto\s*(.*)', raw_data).group(1).strip()
+    data['proprietor_name'] = re.search(r'Proprietor name\s*\(1\)\s*(.*)', raw_data).group(1).strip()
+    data['body_incorporate'] = re.search(r'Body Incorporate\s*(.*)', raw_data).group(1).strip()
+    data['proprietor_address'] = re.search(r'Proprietor Address\s*(.*)', raw_data).group(1).strip()
+    data['email_id'] = re.search(r'Email Id\s*(.*)', raw_data).group(1).strip()
+    data['agent_name'] = re.search(r'Agent name\s*(.*)', raw_data).group(1).strip()
+    data['agent_address'] = re.search(r'Agent Address\s*(.*)', raw_data).group(1).strip()
+    data['goods_service_details'] = re.search(r'Goods & Service Details\s*\[CLASS : \d+\]\s*(.*)', raw_data).group(1).strip()
+    data['publication_details'] = re.search(r'Publication Details\s*Published in Journal No\.\s*:\s*(.*)', raw_data).group(1).strip()
+    data['publication_date'] = re.search(r'Dated\s*:\s*(.*)', raw_data).group(1).strip()
+
+    return data
+
+def scrape_application_data_range(start, end):
+    for app_number in range(start, end):
         print(f"Scraping application number: {app_number}")
-        data = scrape_application_data(app_number)
-        if data:
-            print(f"Data for application number {app_number}: {data}")
+        unique_image_uuid = uuid.uuid4() # To avoid race cond.n while multithreading
+
+        try:
+            raw_data = scrape_application_data(app_number, unique_image_uuid)
+            data = parse_raw_data(raw_data)
+            if data:
+                print(f"Data for application number {app_number}: {data}")
+            time.sleep(1)
+        except Exception as e:
+            print(f"Error in scapping data for application {app_number}, error: {e}")
+
         
-        time.sleep(1)
+
+def cleanup_png_files():
+    png_files = glob.glob("*.png")
+    for file in png_files:
+        try:
+            os.remove(file)
+            print(f"Deleted file: {file}")
+        except Exception as e:
+            print(f"Error deleting file {file}: {e}")
+
+if __name__ == "__main__":
+    # ranges for multithreading
+    ranges = [(1111000, 1111011), (1111011, 1111022), (1111022, 1111033)]
+
+    with ThreadPoolExecutor(max_workers=len(ranges)) as executor:
+        futures = [executor.submit(scrape_application_data_range, start, end) for start, end in ranges]
+
+    for future in futures:
+        try:
+            future.result()
+        except Exception as e:
+            print(f"Error in thread: {e}")
+
+
+    cleanup_png_files()
