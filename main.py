@@ -5,7 +5,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from twocaptcha import TwoCaptcha
-import sys, os, time, uuid, glob, re, pytesseract
+import sys, os, time, uuid, glob, re, pytesseract, easyocr
 from PIL import Image,  ImageEnhance, ImageFilter
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
@@ -21,7 +21,7 @@ def solve_captcha_using_2CAPTCHA(image_path):
     try:
         result = solver.normal(image_path)
     except Exception as e:
-        print("Failed to solve CAPTCHA.", e)
+        print("Failed to solve CAPTCHA:", e)
         sys.exit(e)
     else:
         print("CAPTCHA Solved: ", result['code'])
@@ -48,12 +48,24 @@ def solve_captcha_using_tesseract(image_path):
         print(type(processed_image))
         text = pytesseract.image_to_string(image=processed_image, config='--psm 6', lang='eng')
     except Exception as e:
-        print("Failed to solve CAPTCHA.", e)
+        print("Failed to solve CAPTCHA:", e)
         sys.exit(e)
     else:
         result = text.strip()
         print("CAPTCHA Solved: ", result)
         return result
+
+def solve_captcha_using_easyocr(image_path):
+    try:
+        reader = easyocr.Reader(['en'])
+        result = reader.readtext(image_path)
+    except Exception as e:
+        print("Failed to solve CAPTCHA:", e)
+        sys.exit(e)
+    else:
+        print("CAPTCHA Solved: ", result[0][1])
+        return result[0][1]
+
 
 def scrape_application_data(app_number, unique_image_uuid):
     options = Options()
@@ -94,7 +106,7 @@ def scrape_application_data(app_number, unique_image_uuid):
         image = image.crop((int(x), int(y), int(width), int(height)))
         image.save(f"captcha_{unique_image_uuid}.png")
 
-        captcha_solution = solve_captcha_using_tesseract(f"captcha_{unique_image_uuid}.png")
+        captcha_solution = solve_captcha_using_easyocr(f"captcha_{unique_image_uuid}.png")
 
         if not captcha_solution:
             return None
@@ -193,6 +205,9 @@ def cleanup_png_files():
             print(f"Error deleting file {file}: {e}")
 
 if __name__ == "__main__":
+
+    cleanup_png_files()
+
     # ranges for multithreading
     ranges = [(1111000, 1111011), (1111011, 1111022), (1111022, 1111033)]
 
@@ -206,4 +221,4 @@ if __name__ == "__main__":
             print(f"Error in thread: {e}")
 
 
-    cleanup_png_files()
+    
