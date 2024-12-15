@@ -205,9 +205,6 @@ def cleanup_png_files():
             print(f"Error deleting file {file}: {e}")
 
 if __name__ == "__main__":
-
-    cleanup_png_files()
-
     # ranges for multithreading
     ranges = [(1111000, 1111011), (1111011, 1111022), (1111022, 1111033)]
 
@@ -219,6 +216,8 @@ if __name__ == "__main__":
             future.result()
         except Exception as e:
             print(f"Error in thread: {e}")
+
+    cleanup_png_files()
 
 
     

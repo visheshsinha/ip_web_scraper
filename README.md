@@ -2,8 +2,9 @@
 
 Pre-requisite: Firefox Browser installed
 
+Preferrably use Python 3.9, since it's tested on it, python3.13 (Latest) doesn't have support for pytorch (dep. for easyocr) yet
 ```
-python / python3 -m venv venv
+python / python3.9 -m venv venv
 source venv/bin/activate
 pip / pip3 install -r requirements.txt
 mkdir driver
