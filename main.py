@@ -5,8 +5,8 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from twocaptcha import TwoCaptcha
-import sys, os, time, uuid, glob, re
-from PIL import Image
+import sys, os, time, uuid, glob, re, pytesseract
+from PIL import Image,  ImageEnhance, ImageFilter
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor
 
@@ -15,16 +15,45 @@ GECKO_DRIVER_PATH = os.getenv('GECKO_DRIVER_PATH')
 API_KEY_2CAPTCHA = os.getenv('API_KEY_2CAPTCHA')
 BASE_URL_IPINDIA = os.getenv('BASE_URL_IPINDIA')
 
-def solve_captcha(image_path):
+# out of service - not using anymore
+def solve_captcha_using_2CAPTCHA(image_path):
     solver = TwoCaptcha(API_KEY_2CAPTCHA)
     try:
         result = solver.normal(image_path)
     except Exception as e:
-        print("Failed to solve CAPTCHA.")
+        print("Failed to solve CAPTCHA.", e)
         sys.exit(e)
     else:
         print("CAPTCHA Solved: ", result['code'])
         return result['code']
+
+def preprocess_image_for_enhancement(image_path): # not much help
+    try:
+        image = Image.open(image_path)
+        gray_image = image.convert('L')
+        enhancer = ImageEnhance.Contrast(gray_image)
+        contrast_image = enhancer.enhance(2.0)
+        sharpened = contrast_image.filter(ImageFilter.EDGE_ENHANCE)
+        threshold = 200
+        binary_image = sharpened.point(lambda x: 0 if x < threshold else 255, '1')
+        binary_image.save(f'binary_image_{image_path}.png')
+        return binary_image
+    except Exception as e:
+        print(f"Preprocessing error: {e}")
+        return None
+
+def solve_captcha_using_tesseract(image_path):
+    try:
+        processed_image = preprocess_image_for_enhancement(image_path)
+        print(type(processed_image))
+        text = pytesseract.image_to_string(image=processed_image, config='--psm 6', lang='eng')
+    except Exception as e:
+        print("Failed to solve CAPTCHA.", e)
+        sys.exit(e)
+    else:
+        result = text.strip()
+        print("CAPTCHA Solved: ", result)
+        return result
 
 def scrape_application_data(app_number, unique_image_uuid):
     options = Options()
@@ -41,6 +70,7 @@ def scrape_application_data(app_number, unique_image_uuid):
         select_national_appNum.click()
 
         # getting a race condition here - captcha.ashx is getting dynamically updated while being fetched
+        # solved using taking screenshot & cropping it
         # CaptchaURL : https://tmrsearch.ipindia.gov.in/eregister/captcha.ashx
         captcha_image_element = WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.ID, "ImageCaptcha"))
@@ -64,7 +94,7 @@ def scrape_application_data(app_number, unique_image_uuid):
         image = image.crop((int(x), int(y), int(width), int(height)))
         image.save(f"captcha_{unique_image_uuid}.png")
 
-        captcha_solution = solve_captcha(f"captcha_{unique_image_uuid}.png")
+        captcha_solution = solve_captcha_using_tesseract(f"captcha_{unique_image_uuid}.png")
 
         if not captcha_solution:
             return None

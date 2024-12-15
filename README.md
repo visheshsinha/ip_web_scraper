@@ -10,6 +10,11 @@ mkdir driver
 vim .env
 ```
 
+For tesseract (PS: the one in requirement.txt is just the python wrapper for this OCR)
+```
+brew install tesseract
+```
+
 In `.env`, enter your API key from 2Captcha:
 ```
 API_KEY_2CAPTCHA='your_API_KEY' 
